@@ -1,18 +1,27 @@
-use io::Read;
-use std::io;
+mod buffer;
+
+use std::io::{stdout, Write};
 use std::time::Duration;
 
-use crossterm::{event, terminal};
+use crossterm::cursor;
+use crossterm::{event, terminal, terminal::ClearType, execute};
 use event::{Event, KeyCode};
+
+use buffer::Buf;
+
 
 struct Editor {
     reader: Reader,
+    output: Output,
 }
 
 impl Editor {
     fn new() -> Self {
         terminal::enable_raw_mode().expect("Could not enable raw mode");
-        Self { reader: Reader }
+        execute!(stdout(), cursor::Hide).expect("Could not hide cursor");
+        Self { reader: Reader,
+               output: Output::new(),
+        }
     }
 
     fn close(&self) -> crossterm::Result<()> {
@@ -29,25 +38,32 @@ impl Editor {
                 modifiers: event::KeyModifiers::CONTROL,
                 ..
             } => return Ok(false),
-            event@event::KeyEvent {
-                code: KeyCode::Char(_),
+            event::KeyEvent {
+                code: KeyCode::Char('c'),
+                modifiers: event::KeyModifiers::ALT,
                 ..
-            } => println!("{:?}\r", event),
-            _ => {
-                println!("No Input\r");
-            }
+            } => self.clear_screen().expect("Couldn't clear screen"),
+            event@event::KeyEvent { .. } 
+              => println!("{:?}\r", event),
         }
         return Ok(true)
         
     }
 
     fn execute(&self) -> crossterm::Result<bool> {
+        self.output.refresh()?;
         self.process_keyevent()
+    }
+
+    fn clear_screen(&self) -> crossterm::Result<()> {
+        execute!(stdout(), terminal::Clear(ClearType::All))
     }
 }
 
 impl Drop for Editor {
     fn drop(&mut self) {
+        println!("\x1b[2J"); // clears screen with esc characters
+        execute!(stdout(), cursor::Show).expect("Could not show cursor");
         self.close().expect("Could not disable raw mode");
     }
 }
@@ -68,63 +84,41 @@ impl Reader {
     }
 }
 
+struct Output {
+    size: (u16, u16),
+    buffer: Buf, 
+}
+
+impl Output {
+    fn new() -> Self {
+        Self { size: terminal::size().unwrap(),
+               buffer: Buf::new(),
+        }
+    }
+
+    fn clear_screen(&self) -> crossterm::Result<()> {
+        execute!(stdout(), terminal::Clear(ClearType::All))?;
+        execute!(stdout(), cursor::MoveTo(0, 0))
+    }
+    
+    fn draw_rows(&self) {
+        for _ in 0..self.size.1-1 {
+            println!("💩\r");
+        }
+        print!("💩\r"); stdout().flush().unwrap(); // last line not \n
+    }
+
+    fn refresh(&self) -> crossterm::Result<()> {
+        self.clear_screen()?;
+        self.draw_rows();
+        execute!(stdout(), cursor::MoveTo(0, 0))
+    }
+}
+
 fn main() -> crossterm::Result<()> {
-    let _e = Editor::new();
-    let mut stdin = io::stdin();
-    let ref_stdin = io::BufReader::new(&mut stdin);
+    let editor = Editor::new();
+    while editor.execute()? {};
 
-    for byte in ref_stdin.bytes() {
-        let char = byte.unwrap() as char;
-        if char.is_control() {
-            println!("{}\r", char as u8);
-        } else {
-            println!("{}\r", char);
-        }
-        if char == 'q' {
-            break;
-        }
-    }
-
-    for byte in (&mut stdin).bytes() {
-        println!("{}\r", byte.as_ref().unwrap());
-        if byte.unwrap() == b'w' {
-            break;
-        }
-    }
-
-    for byte in stdin.bytes() {
-        println!("{}\r", byte.as_ref().unwrap());
-        if byte.unwrap() == b'e' {
-            break;
-        }
-    }
-
-    'ct_read: loop {
-        if event::poll(Duration::from_millis(0))? {
-            if let Event::Key(event) = event::read()? {
-                match event {
-                    event::KeyEvent {
-                        code: KeyCode::Char('q'),
-                        modifiers: event::KeyModifiers::CONTROL,
-                        ..
-                    } => break 'ct_read,
-                    event::KeyEvent {
-                        code: KeyCode::Char(chr),
-                        ..
-                    } => {
-                        println!("{}\r", chr);
-                    }
-                    _ => {
-                        println!("NOPE\r");
-                    }
-                }
-                println!("{:?}\r", event);
-            }
-        } else {
-            println!("No input\r");
-        }
-    }
-
-    println!("Hello, world!\n\r");
+    println!("Shouldn't print if clear screen works\n\r");
     Ok(())
 }

@@ -13,7 +13,7 @@ impl Buf {
         self.content.push(chr)
     }
 
-    fn push_str(&mut self, str: &str) {
+    pub fn push_str(&mut self, str: &str) {
         self.content.push_str(str)
     }
 }

@@ -2,6 +2,7 @@ mod buffer;
 mod output;
 mod global_vars;
 mod reader;
+mod cursor_controller;
 mod editor;
 
 use editor::Editor;

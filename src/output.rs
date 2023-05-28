@@ -1,20 +1,24 @@
 use crate::buffer::Buf;
 use crate::global_vars::VERSION;
+use crate::cursor_controller::CursorController;
 
 use std::io::{stdout, Write};
 
-use crossterm::{cursor, terminal, execute, queue};
+use crossterm::{cursor, terminal, execute, queue, event};
 use terminal::{ClearType};
 
 pub struct Output {
-    size: (u16, u16),
+    size: (usize, usize),
     buffer: Buf, 
+    cursor_controller: CursorController,
 }
 
 impl Output {
     pub fn new() -> Self {
-        Self { size: terminal::size().unwrap(),
+        let size = terminal::size().map(|(x, y)| (x as usize, y as usize)).unwrap();
+        Self { size,
                buffer: Buf::new(),
+               cursor_controller: CursorController::new(size),
         }
     }
 
@@ -51,7 +55,11 @@ impl Output {
         self.clear_screen()?;
         queue!(self.buffer, cursor::MoveTo(0,0))?;
         self.draw_rows();
-        queue!(self.buffer, cursor::MoveTo(0,0))?;
+        queue!(self.buffer, cursor::MoveTo(self.cursor_controller.cursor_x as u16, self.cursor_controller.cursor_y as u16))?;
         self.buffer.flush()
+    }
+
+    pub fn move_cursor(&mut self, direction: event::KeyCode) {
+        self.cursor_controller.move_cursor(direction)
     }
 }

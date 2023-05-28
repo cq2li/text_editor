@@ -28,7 +28,7 @@ impl Editor {
         Ok(())
     }
 
-    fn process_keyevent(&self) -> crossterm::Result<bool> {
+    fn process_keyevent(&mut self) -> crossterm::Result<bool> {
         match self.reader.read_keyevent()? {
             event::KeyEvent {
                 code: KeyCode::Char('q'),
@@ -36,10 +36,10 @@ impl Editor {
                 ..
             } => return Ok(false),
             event::KeyEvent {
-                code: KeyCode::Char('c'),
-                modifiers: event::KeyModifiers::ALT,
+                code: direction @ (KeyCode::Up|KeyCode::Down|KeyCode::Left|KeyCode::Right),
+                modifiers: event::KeyModifiers::NONE,
                 ..
-            } => self.clear_screen().expect("Couldn't clear screen"),
+            } => self.output.move_cursor(direction),
             event@event::KeyEvent { .. } 
               => println!("{:?}\r", event),
         }

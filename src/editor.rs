@@ -42,7 +42,10 @@ impl Editor {
                 ..
             } => return Ok(false),
             event::KeyEvent {
-                code: direction @ (KeyCode::Up|KeyCode::Down|KeyCode::Left|KeyCode::Right),
+                code: direction @ (KeyCode::Up|KeyCode::Down|
+                                   KeyCode::Char('j')|KeyCode::Char('k')|
+                                   KeyCode::Left|KeyCode::Right|
+                                   KeyCode::Char('h')|KeyCode::Char('l')),
                 modifiers: event::KeyModifiers::NONE,
                 ..
             } => self.output.move_cursor(direction),
@@ -60,5 +63,5 @@ impl Editor {
 
     fn clear_screen(&self) -> crossterm::Result<()> {
         execute!(stdout(), terminal::Clear(ClearType::All))
-    }
+    } 
 }

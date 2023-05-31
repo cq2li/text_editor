@@ -7,6 +7,19 @@ use terminal::{ClearType};
 use crate::reader::Reader;
 use crate::output::Output;
 
+// @brief stores clean up code in drop
+pub struct CleanUp;
+
+impl Drop for CleanUp {
+    fn drop(&mut self) {
+        // println!("\x1b[2J"); // clears screen with esc characters
+        if terminal::is_raw_mode_enabled().unwrap() {
+            terminal::disable_raw_mode().expect("Couldn't disable raw mode");
+        }
+    }
+    
+}
+
 pub struct Editor {
     reader: Reader,
     output: Output,
@@ -19,13 +32,6 @@ impl Editor {
         Self { reader: Reader,
                output: Output::new(),
         }
-    }
-
-    fn close(&self) -> crossterm::Result<()> {
-        if terminal::is_raw_mode_enabled()? {
-            terminal::disable_raw_mode()?;
-        }
-        Ok(())
     }
 
     fn process_keyevent(&mut self) -> crossterm::Result<bool> {
@@ -54,13 +60,5 @@ impl Editor {
 
     fn clear_screen(&self) -> crossterm::Result<()> {
         execute!(stdout(), terminal::Clear(ClearType::All))
-    }
-}
-
-impl Drop for Editor {
-    fn drop(&mut self) {
-        println!("\x1b[2J"); // clears screen with esc characters
-        // execute!(stdout(), cursor::Show).expect("Could not show cursor");
-        self.close().expect("Could not disable raw mode");
     }
 }

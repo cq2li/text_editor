@@ -26,6 +26,7 @@ impl CursorController {
     pub fn move_cursor(&mut self, direction: KeyCode, editor_rows:&EditorRows) {
         let y_lim = editor_rows.num_rows();
         let x_lim = editor_rows.get_row(min(self.cursor_y, y_lim-1)).len();
+        let x_lim_above = editor_rows.get_row(self.cursor_y.saturating_sub(1)).len();
         match direction {
             KeyCode::Up | KeyCode::Char('k') => {
                 if self.cursor_y > 0 {
@@ -38,11 +39,19 @@ impl CursorController {
                 }
             },
             KeyCode::Left | KeyCode::Char('h') => {
+                if self.cursor_x == 0 {
+                    self.cursor_x = x_lim_above;
+                    self.cursor_y = self.cursor_y.saturating_sub(1);
+                }
                 if self.cursor_x > 0 {
                     self.cursor_x -= 1;
                 }
             },
             KeyCode::Right | KeyCode::Char('l') => {
+                if self.cursor_x == x_lim {
+                    self.cursor_x = 0;
+                    self.cursor_y = min(y_lim, self.cursor_y + 1);
+                }
                 if self.cursor_x < x_lim {
                     self.cursor_x += 1;
                 }

@@ -3,10 +3,14 @@ use crate::cursor_controller::CursorController;
 use crate::global_vars::VERSION;
 use crate::rows::EditorRows;
 
-use std::cmp::{min, max};
+use std::cmp::{max, min};
 use std::io::{stdout, Write};
 
-use crossterm::{cursor, event::{self, KeyCode}, execute, queue, terminal};
+use crossterm::{
+    cursor,
+    event::{self, KeyCode},
+    execute, queue, terminal,
+};
 use terminal::ClearType;
 
 pub struct Output {
@@ -37,14 +41,14 @@ impl Output {
     pub fn draw_rows(&mut self) {
         let display_x = self.size.0;
         let display_y = self.size.1;
-        let line_marker = "💩";
+        let line_marker = "🔥";
         for i in 0..display_y {
             let file_row_pos = i + self.cursor_controller.row_offset;
             let file_col_pos = self.cursor_controller.col_offset;
             if file_row_pos >= self.editor_rows.num_rows() {
                 self.buffer.push_str(line_marker);
                 if i == display_y / 10 && self.editor_rows.num_rows() == 0 {
-                    let mut welcome = format!("Poop Editor --- Version {}", VERSION);
+                    let mut welcome = format!("Fire Editor --- Version {}", VERSION);
                     if welcome.len() > display_x as usize {
                         welcome.truncate(display_x as usize);
                     }
@@ -53,12 +57,21 @@ impl Output {
                     self.buffer.push_str(&welcome);
                 }
             } else {
-                let len = min(self.editor_rows.get_row(file_row_pos).len().saturating_sub(file_col_pos), display_x);
+                let len = min(
+                    self.editor_rows
+                        .get_row(file_row_pos)
+                        .len()
+                        .saturating_sub(file_col_pos),
+                    display_x,
+                );
                 if len == 0 {
-                    self.buffer.push_str("")
+                    self.buffer.push_str(
+                        &self.editor_rows.get_row(file_row_pos)[0..0],
+                    )
                 } else {
-                    self.buffer
-                        .push_str(&self.editor_rows.get_row(file_row_pos)[file_col_pos..(file_col_pos + len)])
+                    self.buffer.push_str(
+                        &self.editor_rows.get_row(file_row_pos)[file_col_pos..(file_col_pos + len)],
+                    )
                 }
             }
             queue!(self.buffer, terminal::Clear(ClearType::UntilNewLine)).unwrap();
@@ -83,17 +96,21 @@ impl Output {
     }
 
     pub fn move_cursor(&mut self, direction: KeyCode) {
-        let v_lim = self.editor_rows.num_rows();
-        let at =
-        match direction {
-            KeyCode::Char('l') | KeyCode::Char('h') | KeyCode::Left | KeyCode::Right
-                => self.cursor_controller.row_offset,
-            KeyCode::Char('j') | KeyCode::Down
-                => min(v_lim, self.cursor_controller.row_offset + 1),
-            _   => self.cursor_controller.row_offset.saturating_sub(1),
+        let v_lim = self.editor_rows.num_rows().saturating_sub(1);
+        // h_limits should be fetched as prev or next line if jumping vertically
+        let at = match direction {
+            KeyCode::Char('l') | KeyCode::Char('h') | KeyCode::Left | KeyCode::Right | KeyCode::End | KeyCode::Home => {
+                self.cursor_controller.row_offset + self.cursor_controller.cursor_y
+            }
+            KeyCode::Char('j') | KeyCode::Down => min(v_lim, self.cursor_controller.row_offset + self.cursor_controller.cursor_y + 1),
+            KeyCode::Char('k') | KeyCode::Up => (self.cursor_controller.row_offset + self.cursor_controller.cursor_y).saturating_sub(1),
+            _ => !unimplemented!(),
         };
 
-        self.cursor_controller
-            .move_cursor(direction, self.editor_rows.num_rows(), self.editor_rows.get_row(at).len())
+        self.cursor_controller.move_cursor(
+            direction,
+            self.editor_rows.num_rows(),
+            self.editor_rows.get_row(at).len(),
+        )
     }
 }

@@ -1,0 +1,12 @@
+7444a4a Implement End and Home, snap to row
+6cba7e2 Implement 4 directional scrolling in file
+f5c2715 Implement file reading
+f3fb60e Merge branch 'main' of github.com:cq2li/text_editor
+47ebb8a Implement arrow key cursor movement
+5f7f89e Update README.md
+1f862d1 Update README.md
+473833b Create README.md
+6a3f4f2 Refactor into modules
+04082d1 Implement a content buffer
+10db9a3 Refactor key processing
+7c0d8ee Read byte by byte in raw mode

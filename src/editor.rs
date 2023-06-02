@@ -42,7 +42,13 @@ impl Editor {
                 ..
             } => return Ok(false),
             event::KeyEvent {
-                code: direction @ (KeyCode::Up|KeyCode::Down|KeyCode::Left|KeyCode::Right),
+                code: direction @ 
+                    (KeyCode::Up|KeyCode::Down|
+                     KeyCode::Left|KeyCode::Right|
+                     KeyCode::Home|KeyCode::End|
+                     KeyCode::Char('h')|KeyCode::Char('j')|
+                     KeyCode::Char('k')|KeyCode::Char('l')|
+                     KeyCode::PageUp|KeyCode::PageDown),
                 modifiers: event::KeyModifiers::NONE,
                 ..
             } => self.output.move_cursor(direction),

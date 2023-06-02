@@ -16,7 +16,6 @@ impl EditorRows {
     }
 
     fn from_file(file: &path::Path) -> Self {
-        panic!();
         let file_contents = read_to_string(file).expect("Unable to read");
         Self {
             contents: file_contents.lines().map(|it| it.into()).collect(),

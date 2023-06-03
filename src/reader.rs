@@ -9,15 +9,13 @@ pub struct Reader;
 impl Reader {
     // Reads one byte of input
     // times out and does not block
-    pub fn read_keyevent(&self) -> crossterm::Result<event::KeyEvent> {
-
-        loop {
-            if event::poll(Duration::from_millis(1000))? {
-                if let Event::Key(event) = event::read()? {
-                    return Ok(event);
+    pub fn read_keyevent(&self) -> Option<event::KeyEvent> {
+            if event::poll(Duration::from_millis(16)).unwrap() {
+                if let Event::Key(event) = event::read().unwrap() {
+                    return Some(event);
                 }
             }
-        }
+            return None
     }
 }
 

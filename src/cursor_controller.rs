@@ -40,6 +40,9 @@ impl CursorController {
         };
         match direction {
             KeyCode::Up | KeyCode::Char('k') => {
+                if self.cursor_y != 0 {
+                    self.cursor_x = min(self.cursor_x, x_lim_above);
+                }
                 if self.cursor_y > 0 {
                     self.cursor_y -= 1;
                 }

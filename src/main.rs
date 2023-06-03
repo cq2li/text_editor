@@ -5,6 +5,7 @@ mod reader;
 mod cursor_controller;
 mod editor;
 mod rows;
+mod status;
 
 use editor::{Editor, CleanUp};
 use std::io::stdout;
@@ -14,7 +15,7 @@ use crossterm::{cursor, execute};
 fn main() -> crossterm::Result<()> {
     let _cleanup = CleanUp;
     let mut editor = Editor::new();
-    while editor.execute()? {};
+    editor.execute().expect("Execution error");
 
     println!("Shouldn't print if clear screen works\n\r");
     execute!(stdout(), cursor::MoveTo(0, 0))

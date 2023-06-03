@@ -35,13 +35,13 @@ impl Editor {
     }
 
     fn process_keyevent(&mut self) -> crossterm::Result<bool> {
-        match self.reader.read_keyevent()? {
-            event::KeyEvent {
+        match self.reader.read_keyevent() {
+            Some(event::KeyEvent {
                 code: KeyCode::Char('q'),
                 modifiers: event::KeyModifiers::CONTROL,
                 ..
-            } => return Ok(false),
-            event::KeyEvent {
+            }) => return Ok(false),
+            Some(event::KeyEvent {
                 code: direction @ 
                     (KeyCode::Up|KeyCode::Down|
                      KeyCode::Left|KeyCode::Right|
@@ -51,17 +51,22 @@ impl Editor {
                      KeyCode::PageUp|KeyCode::PageDown),
                 modifiers: event::KeyModifiers::NONE,
                 ..
-            } => self.output.move_cursor(direction),
-            event@event::KeyEvent { .. } 
+            }) => self.output.move_cursor(direction),
+            Some(event@event::KeyEvent { .. }) 
               => println!("{:?}\r", event),
+            None => (),
         }
         return Ok(true)
         
     }
 
     pub fn execute(&mut self) -> crossterm::Result<bool> {
-        self.output.refresh()?;
-        self.process_keyevent()
+        loop {
+            self.output.refresh()?;
+            if !self.process_keyevent()? {
+                return Ok(true)
+            }
+        }
     }
 
     fn clear_screen(&self) -> crossterm::Result<()> {

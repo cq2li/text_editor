@@ -66,5 +66,5 @@ impl Editor {
 
     fn clear_screen(&self) -> crossterm::Result<()> {
         execute!(stdout(), terminal::Clear(ClearType::All))
-    }
+    } 
 }

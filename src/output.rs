@@ -6,7 +6,11 @@ use crate::rows::EditorRows;
 use std::cmp::{min, max};
 use std::io::{stdout, Write};
 
-use crossterm::{cursor, event, execute, queue, terminal};
+use crossterm::{
+    cursor,
+    event::{self, KeyCode},
+    execute, queue, terminal,
+};
 use terminal::ClearType;
 
 pub struct Output {

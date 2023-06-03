@@ -3,7 +3,7 @@ use crate::cursor_controller::CursorController;
 use crate::global_vars::VERSION;
 use crate::rows::EditorRows;
 
-use std::cmp::{max, min};
+use std::cmp::{min, max};
 use std::io::{stdout, Write};
 
 use crossterm::{
@@ -39,16 +39,20 @@ impl Output {
     }
 
     pub fn draw_rows(&mut self) {
+        // the terminal size [)
         let display_x = self.size.0;
         let display_y = self.size.1;
+        // the position in the buffer of the cursor [)
+        let buffer_x = self.cursor_controller.col_offset;
+        let buffer_y = self.cursor_controller.row_offset;
+        let buffer_length = self.editor_rows.num_rows();
         let line_marker = "🔥";
         for i in 0..display_y {
-            let file_row_pos = i + self.cursor_controller.row_offset;
-            let file_col_pos = self.cursor_controller.col_offset;
-            if file_row_pos >= self.editor_rows.num_rows() {
+            let rend_y = i + buffer_y;
+            if i >= buffer_length {
                 self.buffer.push_str(line_marker);
-                if i == display_y / 10 && self.editor_rows.num_rows() == 0 {
-                    let mut welcome = format!("Fire Editor --- Version {}", VERSION);
+                if i == display_y / 10 && buffer_length == 0 {
+                    let mut welcome = format!("🔥 Editor --- Version {}", VERSION);
                     if welcome.len() > display_x as usize {
                         welcome.truncate(display_x as usize);
                     }
@@ -57,22 +61,15 @@ impl Output {
                     self.buffer.push_str(&welcome);
                 }
             } else {
-                let len = min(
-                    self.editor_rows
-                        .get_row(file_row_pos)
-                        .len()
-                        .saturating_sub(file_col_pos),
-                    display_x,
-                );
-                if len == 0 {
-                    self.buffer.push_str(
-                        &self.editor_rows.get_row(file_row_pos)[0..0],
-                    )
+                // determine row_length and the row to be rendered
+                let (row_len, render_row) = if rend_y >= buffer_length {
+                    (0, 0)
                 } else {
-                    self.buffer.push_str(
-                        &self.editor_rows.get_row(file_row_pos)[file_col_pos..(file_col_pos + len)],
-                    )
-                }
+                    (self.editor_rows.get_render(rend_y).len(), rend_y)   
+                };
+                let len = min(row_len.saturating_sub(buffer_x), display_x);
+                let start = if len == 0 { 0 } else { buffer_x };
+                self.buffer.push_str(&self.editor_rows.get_render(render_row)[start..start + len])
             }
             queue!(self.buffer, terminal::Clear(ClearType::UntilNewLine)).unwrap();
             if i < display_y - 1 {
@@ -83,34 +80,26 @@ impl Output {
 
     pub fn refresh(&mut self) -> crossterm::Result<()> {
         self.clear_screen()?;
+        self.cursor_controller.scroll(&self.editor_rows);
         queue!(self.buffer, cursor::MoveTo(0, 0))?;
         self.draw_rows();
+        
+        // cursor_{x,y} is the position in the actual text buffer
+        //  adjust be offsetting
+        let cursor_x = self.cursor_controller.render_x - self.cursor_controller.col_offset;
+        let cursor_y = self.cursor_controller.cursor_y - self.cursor_controller.row_offset;
+
         queue!(
             self.buffer,
             cursor::MoveTo(
-                self.cursor_controller.cursor_x as u16,
-                self.cursor_controller.cursor_y as u16
+                cursor_x as u16,
+                cursor_y as u16
             )
         )?;
         self.buffer.flush()
     }
 
-    pub fn move_cursor(&mut self, direction: KeyCode) {
-        let v_lim = self.editor_rows.num_rows().saturating_sub(1);
-        // h_limits should be fetched as prev or next line if jumping vertically
-        let at = match direction {
-            KeyCode::Char('l') | KeyCode::Char('h') | KeyCode::Left | KeyCode::Right | KeyCode::End | KeyCode::Home => {
-                self.cursor_controller.row_offset + self.cursor_controller.cursor_y
-            }
-            KeyCode::Char('j') | KeyCode::Down => min(v_lim, self.cursor_controller.row_offset + self.cursor_controller.cursor_y + 1),
-            KeyCode::Char('k') | KeyCode::Up => (self.cursor_controller.row_offset + self.cursor_controller.cursor_y).saturating_sub(1),
-            _ => !unimplemented!(),
-        };
-
-        self.cursor_controller.move_cursor(
-            direction,
-            self.editor_rows.num_rows(),
-            self.editor_rows.get_row(at).len(),
-        )
+    pub fn move_cursor(&mut self, direction: event::KeyCode) {
+        self.cursor_controller.move_cursor(direction, &self.editor_rows)
     }
 }

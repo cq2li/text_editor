@@ -35,8 +35,10 @@ impl Output {
     }
 
     pub fn draw_rows(&mut self) {
+        // the terminal size [)
         let display_x = self.size.0;
         let display_y = self.size.1;
+        // the position in the buffer of the cursor [)
         let buffer_x = self.cursor_controller.col_offset;
         let buffer_y = self.cursor_controller.row_offset;
         let buffer_length = self.editor_rows.num_rows();
@@ -55,14 +57,15 @@ impl Output {
                     self.buffer.push_str(&welcome);
                 }
             } else {
+                // determine row_length and the row to be rendered
                 let (row_len, render_row) = if rend_y >= buffer_length {
                     (0, 0)
                 } else {
-                    (self.editor_rows.get_row(rend_y).len(), rend_y)   
+                    (self.editor_rows.get_render(rend_y).len(), rend_y)   
                 };
                 let len = min(row_len.saturating_sub(buffer_x), display_x);
                 let start = if len == 0 { 0 } else { buffer_x };
-                self.buffer.push_str(&self.editor_rows.get_row(render_row)[start..start + len])
+                self.buffer.push_str(&self.editor_rows.get_render(render_row)[start..start + len])
             }
             queue!(self.buffer, terminal::Clear(ClearType::UntilNewLine)).unwrap();
             if i < display_y - 1 {
@@ -73,13 +76,13 @@ impl Output {
 
     pub fn refresh(&mut self) -> crossterm::Result<()> {
         self.clear_screen()?;
-        self.cursor_controller.scroll();
+        self.cursor_controller.scroll(&self.editor_rows);
         queue!(self.buffer, cursor::MoveTo(0, 0))?;
         self.draw_rows();
         
         // cursor_{x,y} is the position in the actual text buffer
         //  adjust be offsetting
-        let cursor_x = self.cursor_controller.cursor_x - self.cursor_controller.col_offset;
+        let cursor_x = self.cursor_controller.render_x - self.cursor_controller.col_offset;
         let cursor_y = self.cursor_controller.cursor_y - self.cursor_controller.row_offset;
 
         queue!(

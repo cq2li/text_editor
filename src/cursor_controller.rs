@@ -1,6 +1,7 @@
 use crossterm::event::{KeyCode};
 use crate::rows::EditorRows;
 use std::cmp::{min, max};
+use crate::rows::{Row, TAB_STOP};
 
 pub struct CursorController {
     pub cursor_x: usize,
@@ -9,6 +10,7 @@ pub struct CursorController {
     size_y: usize,
     pub row_offset: usize,
     pub col_offset: usize,
+    pub render_x: usize,
 }
 
 impl CursorController {
@@ -20,13 +22,22 @@ impl CursorController {
             size_y,
             row_offset: 0,
             col_offset: 0,
+            render_x: 0, // the actual cursor when accounting for tabs
         }
     }
 
-    pub fn move_cursor(&mut self, direction: KeyCode, editor_rows:&EditorRows) {
+    pub fn move_cursor(&mut self, direction: KeyCode, editor_rows: &EditorRows) {
         let y_lim = editor_rows.num_rows();
-        let x_lim = editor_rows.get_row(min(self.cursor_y, y_lim-1)).len();
-        let x_lim_above = editor_rows.get_row(self.cursor_y.saturating_sub(1)).len();
+        let x_lim = if self.cursor_y >= y_lim {
+            0
+        } else {
+            editor_rows.get_render(self.cursor_y).len()
+        };
+        let x_lim_above = if self.cursor_y == 0 {
+            0
+        } else {
+            editor_rows.get_row(self.cursor_y - 1).row_content.len()
+        };
         match direction {
             KeyCode::Up | KeyCode::Char('k') => {
                 if self.cursor_y > 0 {
@@ -39,20 +50,18 @@ impl CursorController {
                 }
             },
             KeyCode::Left | KeyCode::Char('h') => {
-                if self.cursor_x == 0 {
+                if self.cursor_x == 0 && self.cursor_y != 0 {
                     self.cursor_x = x_lim_above;
-                    self.cursor_y = self.cursor_y.saturating_sub(1);
-                }
-                if self.cursor_x > 0 {
+                    self.cursor_y = self.cursor_y - 1;
+                } else if self.cursor_x > 0 {
                     self.cursor_x -= 1;
                 }
             },
             KeyCode::Right | KeyCode::Char('l') => {
-                if self.cursor_x == x_lim {
+                if self.render_x == x_lim {
                     self.cursor_x = 0;
                     self.cursor_y = min(y_lim, self.cursor_y + 1);
-                }
-                if self.cursor_x < x_lim {
+                } else if self.cursor_x < x_lim {
                     self.cursor_x += 1;
                 }
             },
@@ -72,25 +81,43 @@ impl CursorController {
         }
 
         let row_len = if self.cursor_y < y_lim {
-            editor_rows.get_row(self.cursor_y).len()
+            editor_rows.get_render(self.cursor_y).len()
         } else {
             0
         };
         self.cursor_x = min(self.cursor_x, row_len);
     }
 
-    pub fn scroll(&mut self) {
+    pub fn scroll(&mut self, editor_rows: &EditorRows) {
+        self.render_x = if self.cursor_y < editor_rows.num_rows() {
+            self.get_render_x(&editor_rows.get_row(self.cursor_y))
+        } else {
+            0
+        };
         if self.cursor_y >= self.row_offset + self.size_y {
             self.row_offset = self.cursor_y - self.size_y + 1;
         }
         if self.cursor_y < self.row_offset {
             self.row_offset = self.cursor_y;
         }
-        if self.cursor_x >= self.col_offset + self.size_x {
-            self.col_offset = self.cursor_x - self.size_x + 1;
+        if self.render_x >= self.col_offset + self.size_x {
+            self.col_offset = self.render_x - self.size_x + 1;
         }
-        if self.cursor_x < self.col_offset {
-            self.col_offset = self.cursor_x;
+        if self.render_x < self.col_offset {
+            self.col_offset = self.render_x;
         }
+    }
+
+    pub fn get_render_x(&mut self, row: &Row) -> usize {
+        row.row_content[..self.cursor_x]
+            .chars()
+            .fold(0, |accm, chr| {
+                if chr == '\t' {
+                    // move to tab stp to left and hop right one tab
+                    accm - (accm % TAB_STOP) + TAB_STOP
+                } else {
+                    accm + 1
+                }
+            })
     }
 }

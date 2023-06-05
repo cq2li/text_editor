@@ -149,4 +149,51 @@ impl Output {
         self.cursor_controller
             .move_cursor(direction, &self.editor_rows)
     }
+
+    pub fn insert_char(&mut self, char: char) {
+        if self.cursor_controller.cursor_y == self.editor_rows.num_rows() {
+            self.editor_rows.insert_row();
+        }
+        self.editor_rows
+                .get_row_mut(self.cursor_controller.cursor_y)
+                .insert_char(char, self.cursor_controller.cursor_x);
+        self.cursor_controller.cursor_x += 1;
+    }
+
+    pub fn delete_char(&mut self, method: KeyCode) {
+        let cursor_y = self.cursor_controller.cursor_y;
+        let cursor_x = 
+            self.cursor_controller.cursor_x + 
+            match method {
+                KeyCode::Backspace => 0,
+                KeyCode::Delete => 1,
+                _ => unimplemented!(),
+            };
+
+        let x_adjust: usize = match method {
+            KeyCode::Backspace => 1,
+            KeyCode::Delete => 0,
+            _ => unimplemented!(),
+        };
+
+        if cursor_y == 0 && cursor_x == 0 {
+            return ()
+        }
+
+        if cursor_y == self.editor_rows.num_rows() {
+            self.move_cursor(KeyCode::Left);
+            return ()
+        }
+        
+        if cursor_x == 0 {
+            self.editor_rows.delete_row_shift_up(cursor_y);
+            self.cursor_controller.cursor_y -= 1;
+            return ()
+        }
+        
+        self.editor_rows
+                .get_row_mut(self.cursor_controller.cursor_y)
+                .delete_char(self.cursor_controller.cursor_x - x_adjust);
+        self.cursor_controller.cursor_x -= x_adjust;
+    }
 }

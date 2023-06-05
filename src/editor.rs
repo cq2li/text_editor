@@ -1,7 +1,7 @@
 use std::io::{stdout, Write};
 
 use crossterm::{cursor, event, terminal, execute, queue};
-use event::{Event, KeyCode};
+use event::{Event, KeyCode, KeyModifiers};
 use terminal::{ClearType};
 
 use crate::reader::Reader;
@@ -46,15 +46,33 @@ impl Editor {
                     (KeyCode::Up|KeyCode::Down|
                      KeyCode::Left|KeyCode::Right|
                      KeyCode::Home|KeyCode::End|
-                     KeyCode::Char('h')|KeyCode::Char('j')|
-                     KeyCode::Char('k')|KeyCode::Char('l')|
                      KeyCode::PageUp|KeyCode::PageDown),
-                modifiers: event::KeyModifiers::NONE,
+                modifiers: KeyModifiers::NONE,
                 ..
             }) => self.output.move_cursor(direction),
-            Some(event@event::KeyEvent { .. }) 
-              => println!("{:?}\r", event),
+            Some(event::KeyEvent {
+                code: direction @ 
+                    (KeyCode::Char('h')|KeyCode::Char('j')|
+                     KeyCode::Char('k')|KeyCode::Char('l')),
+                modifiers: KeyModifiers::CONTROL,
+                ..
+            }) => self.output.move_cursor(direction),
+            Some(event::KeyEvent {
+                code: code @ (KeyCode::Backspace|KeyCode::Delete),
+                modifiers: KeyModifiers::NONE,
+                ..
+            }) => self.output.delete_char(code),
+            Some(event::KeyEvent {
+                code: code @ (KeyCode::Char(..)|KeyCode::Tab),
+                modifiers: KeyModifiers::NONE,
+                ..
+            }) => self.output.insert_char(match code {
+                KeyCode::Tab => '\t',
+                KeyCode::Char(char) => char,
+                _ => unimplemented!(),
+            }),
             None => (),
+            _ => (),
         }
         return Ok(true)
         
@@ -68,8 +86,4 @@ impl Editor {
             }
         }
     }
-
-    fn clear_screen(&self) -> crossterm::Result<()> {
-        execute!(stdout(), terminal::Clear(ClearType::All))
-    } 
 }

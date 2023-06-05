@@ -2,16 +2,29 @@ use std::{env, fs::{self, read_to_string}, io, cmp, path::{self, PathBuf}};
 
 pub const TAB_STOP: usize = 8;
 
+#[derive(Default)]
 pub struct Row {
-    pub row_content: Box<str>,
+    pub row_content: String,
     pub render: String,
 }
 
 impl Row {
-    fn new(row_content: Box<str>, render: String) -> Self {
+    fn new(row_content: String, render: String) -> Self {
         Self {
             row_content,
             render,
+        }
+    }
+
+    pub fn insert_char(&mut self, char: char, at: usize) {
+        self.row_content.insert(at, char);
+        EditorRows::render_row(self);
+    }
+
+    pub fn delete_char(&mut self, at: usize) {
+        if at < self.row_content.len() {
+            self.row_content.remove(at);
+            EditorRows::render_row(self)
         }
     }
 }
@@ -80,9 +93,32 @@ impl EditorRows {
         &self.contents[at]
     }
 
+    pub fn get_row_mut(&mut self, at: usize) -> &mut Row {
+        &mut self.contents[at]
+    }
+
     pub fn get_render<'a>(self:&'a Self, at: usize) -> &'a str {
         self.get_row(at).render.as_str()
     }
+
+    pub fn insert_row(&mut self) {
+        self.contents.push(Row::default())
+    }
+
+    pub fn delete_row(&mut self, at: usize) {
+        self.contents.remove(at);
+    }
+
+    pub fn delete_row_shift_up(&mut self, at: usize) {
+        let content = self.get_row(at).row_content.clone();
+        let pushed_on = self.get_row_mut(at - 1);
+        pushed_on
+            .row_content
+            .push_str(content.as_str());
+        EditorRows::render_row(pushed_on);
+        self.delete_row(at);
+    }
+
 }
 
 

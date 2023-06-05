@@ -5,7 +5,7 @@ use crate::rows::EditorRows;
 use crate::status::StatusMessage;
 
 use std::cmp::{max, min};
-use std::io::{stdout, Write};
+use std::io::{stdout, Write, self};
 
 use crossterm::style;
 use crossterm::{
@@ -195,5 +195,9 @@ impl Output {
                 .get_row_mut(self.cursor_controller.cursor_y)
                 .delete_char(self.cursor_controller.cursor_x - x_adjust);
         self.cursor_controller.cursor_x -= x_adjust;
+    }
+
+    pub fn save(&self) {
+        self.editor_rows.save().unwrap()
     }
 }

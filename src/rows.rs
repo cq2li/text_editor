@@ -1,4 +1,4 @@
-use std::{env, fs::{self, read_to_string}, io, cmp, path::{self, PathBuf}};
+use std::{env, fs::{self, read_to_string}, io, cmp, path::{self, PathBuf}, io::Write};
 
 pub const TAB_STOP: usize = 8;
 
@@ -117,6 +117,27 @@ impl EditorRows {
             .push_str(content.as_str());
         EditorRows::render_row(pushed_on);
         self.delete_row(at);
+    }
+
+    pub fn save(&self) -> io::Result<()> {
+        match &self.filename {
+            None => Err(io::Error::new(io::ErrorKind::NotFound, "no file name specified")),
+            Some(name) => {
+                let mut file = fs::OpenOptions::new().write(true).create(true).open(name)?;
+                let content = 
+                    self.contents
+                        .iter()
+                        .fold(
+                            String::new(),
+                            |mut accm, row| {
+                                accm.push_str(row.row_content.as_str());
+                                accm.push('\n');
+                                accm
+                            });         
+                file.set_len(content.len() as u64)?;
+                file.write_all(content.as_bytes())
+            }
+        }
     }
 
 }

@@ -58,6 +58,11 @@ impl Editor {
                 ..
             }) => self.output.move_cursor(direction),
             Some(event::KeyEvent {
+                code: KeyCode::Char('s'),
+                modifiers: KeyModifiers::CONTROL,
+                ..
+            }) => self.output.save(),
+            Some(event::KeyEvent {
                 code: code @ (KeyCode::Backspace|KeyCode::Delete),
                 modifiers: KeyModifiers::NONE,
                 ..

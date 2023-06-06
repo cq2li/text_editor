@@ -30,6 +30,11 @@ impl StatusMessage {
                 }
             })
     }
+
+    pub fn clear_custom_message(&mut self) {
+        self.message = None;
+        self.set_time = None;
+    }
 }
 
 

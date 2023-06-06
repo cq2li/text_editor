@@ -15,12 +15,11 @@ use crossterm::{
 };
 use terminal::ClearType;
 
-
 pub struct Output {
     size: (usize, usize),
     buffer: Buf,
     cursor_controller: CursorController,
-    editor_rows: EditorRows,
+    pub editor_rows: EditorRows,
     pub status_message: StatusMessage,
     pub dirty: u64,
 }
@@ -110,7 +109,7 @@ impl Output {
                         .and_then(|path| path.file_name())
                         .and_then(|name| name.to_str())
                         .unwrap_or("[No Name]"),
-                    if self.dirty > 0 {"Mod"} else {""},
+                    if self.dirty > 0 { "Mod" } else { "" },
                     self.editor_rows.num_rows()
                 )
             }
@@ -121,12 +120,11 @@ impl Output {
         } else {
             let y_lim = self.editor_rows.num_rows();
             let buf_y = self.cursor_controller.cursor_y;
-            let x_lim = 
-                if y_lim == buf_y {
-                    0
-                } else {
-                    self.editor_rows.get_row(buf_y).row_content.len()
-                };
+            let x_lim = if y_lim == buf_y {
+                0
+            } else {
+                self.editor_rows.get_row(buf_y).row_content.len()
+            };
             let buf_x = self.cursor_controller.cursor_x;
 
             format!(
@@ -188,24 +186,21 @@ impl Output {
         };
         match (cursor_y, cursor_x, total_rows) {
             // top left cursor with empty file, delete empty row
-            (0, 0, 1) if content_len == 0 => 
-                self.editor_rows.delete_row(cursor_y),
+            (0, 0, 1) if content_len == 0 => self.editor_rows.delete_row(cursor_y),
             // top left cursor with non empty file, do nothing
             (0, 0, _) => (),
             // if at the end of the file, nothing to delete so move cursor left
-            (c_y, _, t_r) if c_y == t_r => 
-                self.move_cursor(KeyCode::Left),
-            // if at the beginning of a line, "delete" the new line by 
+            (c_y, _, t_r) if c_y == t_r => self.move_cursor(KeyCode::Left),
+            // if at the beginning of a line, "delete" the new line by
             //  appending row to previous row and then deleting the current row
             (c_y, 0, _) => {
-                let prev_row_len = 
-                    self.editor_rows.get_row(cursor_y - 1).row_content.len();
+                let prev_row_len = self.editor_rows.get_row(cursor_y - 1).row_content.len();
 
                 self.editor_rows.delete_row_shift_up(c_y);
                 self.cursor_controller.cursor_y -= 1;
                 self.cursor_controller.cursor_x = prev_row_len;
                 ()
-            },
+            }
             // normal deletion of a character before the x cursor
             (c_y, c_x, _) => {
                 self.editor_rows.get_row_mut(c_y).delete_char(c_x - 1);
@@ -215,7 +210,7 @@ impl Output {
         }
         self.dirty += 1;
     }
-    
+
     /* @brief peforms text deletion when the delete key is pressed
      */
     pub fn del(&mut self) {
@@ -237,17 +232,16 @@ impl Output {
             // pressing delete at the end of an row concats two lines
             (c_y, c_x, _) if c_x == content_len => {
                 self.editor_rows.delete_row_shift_up(c_y + 1);
-            },
+            }
             // normal deletion of a character before the x cursor
             (c_y, c_x, _) => {
                 self.editor_rows.get_row_mut(c_y).delete_char(c_x);
                 ()
-            },
-
+            }
         }
         self.dirty += 1;
-    } 
-    
+    }
+
     pub fn enter(&mut self) {
         let cursor_y = self.cursor_controller.cursor_y;
         let cursor_x = self.cursor_controller.cursor_x;
@@ -256,15 +250,21 @@ impl Output {
         if cursor_y == total_rows {
             self.editor_rows.insert_row();
         } else {
-            let split = 
-                self.editor_rows.get_row_mut(cursor_y).row_content.split_off(cursor_x);
+            let split = self
+                .editor_rows
+                .get_row_mut(cursor_y)
+                .row_content
+                .split_off(cursor_x);
             self.editor_rows.insert_row_at(cursor_y + 1);
-            self.editor_rows.get_row_mut(cursor_y + 1).row_content.push_str(&split);
+            self.editor_rows
+                .get_row_mut(cursor_y + 1)
+                .row_content
+                .push_str(&split);
             EditorRows::render_row(self.editor_rows.get_row_mut(cursor_y));
             EditorRows::render_row(self.editor_rows.get_row_mut(cursor_y + 1));
         }
         self.cursor_controller.cursor_y += 1;
-        self.cursor_controller.cursor_x  = 0;
+        self.cursor_controller.cursor_x = 0;
         self.dirty += 1;
     }
 
@@ -273,4 +273,60 @@ impl Output {
         self.dirty = 0;
         res
     }
+}
+
+#[macro_export()]
+macro_rules! prompt {
+    ($output:expr, $($args:tt)*) => {{
+        let output:&mut Output = $output;
+        // file name length
+        let mut input: String = String::with_capacity(255);
+        loop {
+            output.status_message.set_message(format!($($args)*, input));
+            output.refresh()?;
+            match Reader.read_keyevent() {
+                Some(event::KeyEvent {
+                    code: KeyCode::Enter,
+                    modifiers: KeyModifiers::NONE,
+                    ..
+                }) => {
+                    if !input.is_empty() {
+                        output.status_message.set_message(String::new());
+                        break;
+                    }
+                },
+                Some(event::KeyEvent {
+                    code: KeyCode::Backspace,
+                    modifiers: KeyModifiers::NONE,
+                    ..
+                }) => {
+                    if input.len() > 0 {
+                        input.pop();
+                    }
+                },
+                Some(event::KeyEvent {
+                    code: code @ (KeyCode::Char(..)|KeyCode::Tab),
+                    modifiers: case @ (KeyModifiers::NONE| KeyModifiers::SHIFT),
+                    ..
+                }) => input.push(
+                    match code {
+                        KeyCode::Tab => '\t',
+                        KeyCode::Char(char) if matches!(case, KeyModifiers::NONE) => char,
+                        KeyCode::Char(char) if matches!(case, KeyModifiers::SHIFT) => char.to_ascii_uppercase(),
+                        _ => unimplemented!(),
+                    }
+                ),
+                Some(event::KeyEvent {
+                    code: KeyCode::Esc,
+                    ..
+                }) => {
+                    input.clear();
+                    output.status_message.clear_custom_message();
+                    break;
+                },
+                _ => (),
+            }
+        }
+        if input.is_empty() { None } else { Some(input) }
+    }};
 }

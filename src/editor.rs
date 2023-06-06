@@ -1,13 +1,9 @@
-use std::io::{stdout, Write};
-
-use crossterm::{cursor, event, terminal, execute, queue};
+use crossterm::{event, terminal};
 use event::{Event, KeyCode, KeyModifiers};
-use terminal::{ClearType};
 
-use crate::reader::Reader;
 use crate::output::Output;
-
-const QUIT_CONFIRM: u8 = 1;
+use crate::prompt;
+use crate::reader::Reader;
 
 // @brief stores clean up code in drop
 pub struct CleanUp;
@@ -19,22 +15,20 @@ impl Drop for CleanUp {
             terminal::disable_raw_mode().expect("Couldn't disable raw mode");
         }
     }
-    
 }
 
 pub struct Editor {
     reader: Reader,
     output: Output,
-    quit: u8,
 }
 
 impl Editor {
     pub fn new() -> Self {
         terminal::enable_raw_mode().expect("Could not enable raw mode");
         // execute!(stdout(), cursor::Hide).expect("Could not hide cursor");
-        Self { reader: Reader,
-               output: Output::new(),
-               quit: QUIT_CONFIRM,
+        Self {
+            reader: Reader,
+            output: Output::new(),
         }
     }
 
@@ -46,30 +40,43 @@ impl Editor {
                 modifiers: event::KeyModifiers::CONTROL,
                 ..
             }) => {
-                if self.output.dirty > 0 && self.quit > 0 {
-                    self.output
-                        .status_message
-                        .set_message("Unsaved changes! Press CTRL + q again to confirm".to_string());
-                    self.quit -= 1;
-                    return Ok(true)
-                } else {
-                    return Ok(false)
+                if self.output.dirty > 0 {
+                    self.output.status_message.set_message(
+                        "Modified! CTRL + q to exit or ESC to cancel"
+                            .to_string(),
+                    );
+                    self.output.refresh()?;
+                    match event::read().unwrap() {
+                        Event::Key(event::KeyEvent {
+                            code: KeyCode::Char('q'),
+                            modifiers: event::KeyModifiers::CONTROL,
+                            ..
+                        }) => return Ok(false),
+                        _ => return Ok(true),
+                    }
                 }
-            },
+                return Ok(false);
+            }
             /* movement controller */
             Some(event::KeyEvent {
-                code: direction @ 
-                    (KeyCode::Up|KeyCode::Down|
-                     KeyCode::Left|KeyCode::Right|
-                     KeyCode::Home|KeyCode::End|
-                     KeyCode::PageUp|KeyCode::PageDown),
+                code:
+                    direction @ (KeyCode::Up
+                    | KeyCode::Down
+                    | KeyCode::Left
+                    | KeyCode::Right
+                    | KeyCode::Home
+                    | KeyCode::End
+                    | KeyCode::PageUp
+                    | KeyCode::PageDown),
                 modifiers: KeyModifiers::NONE,
                 ..
             }) => self.output.move_cursor(direction),
             Some(event::KeyEvent {
-                code: direction @ 
-                    (KeyCode::Char('h')|KeyCode::Char('j')|
-                     KeyCode::Char('k')|KeyCode::Char('l')),
+                code:
+                    direction @ (KeyCode::Char('h')
+                    | KeyCode::Char('j')
+                    | KeyCode::Char('k')
+                    | KeyCode::Char('l')),
                 modifiers: KeyModifiers::CONTROL,
                 ..
             }) => self.output.move_cursor(direction),
@@ -79,10 +86,18 @@ impl Editor {
                 modifiers: KeyModifiers::CONTROL,
                 ..
             }) => {
+                if matches!(self.output.editor_rows.filename, None) {
+                    self.output.editor_rows.filename =
+                        prompt!(&mut self.output, "Save as : {}").map(|it| it.into());
+                    if let None = self.output.editor_rows.filename {
+                        return Ok(true);
+                    }
+                }
                 let len_written = self.output.save()?;
-                self.output.status_message.set_message(
-                    format!("{} bytes written to disk", len_written))
-            },
+                self.output
+                    .status_message
+                    .set_message(format!("{} bytes written to disk", len_written))
+            }
             /* deletions */
             Some(event::KeyEvent {
                 code: KeyCode::Backspace,
@@ -102,28 +117,28 @@ impl Editor {
             }) => self.output.enter(),
             /* editing document content */
             Some(event::KeyEvent {
-                code: code @ (KeyCode::Char(..)|KeyCode::Tab),
-                modifiers: case @ (KeyModifiers::NONE| KeyModifiers::SHIFT),
+                code: code @ (KeyCode::Char(..) | KeyCode::Tab),
+                modifiers: case @ (KeyModifiers::NONE | KeyModifiers::SHIFT),
                 ..
             }) => self.output.insert_char(match code {
                 KeyCode::Tab => '\t',
                 KeyCode::Char(char) if matches!(case, KeyModifiers::NONE) => char,
-                KeyCode::Char(char) if matches!(case, KeyModifiers::SHIFT) => char.to_ascii_uppercase(),
+                KeyCode::Char(char) if matches!(case, KeyModifiers::SHIFT) => {
+                    char.to_ascii_uppercase()
+                }
                 _ => unimplemented!(),
             }),
             None => (),
             _ => (),
         }
-        self.quit = QUIT_CONFIRM;
-        return Ok(true)
-        
+        return Ok(true);
     }
 
     pub fn execute(&mut self) -> crossterm::Result<bool> {
         loop {
             self.output.refresh()?;
             if !self.process_keyevent()? {
-                return Ok(true)
+                return Ok(true);
             }
         }
     }

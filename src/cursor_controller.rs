@@ -40,6 +40,9 @@ impl CursorController {
         };
         match direction {
             KeyCode::Up | KeyCode::Char('k') => {
+                if self.cursor_y != 0 {
+                    self.cursor_x = min(self.cursor_x, x_lim_above);
+                }
                 if self.cursor_y > 0 {
                     self.cursor_y -= 1;
                 }
@@ -87,29 +90,45 @@ impl CursorController {
         };
         self.cursor_x = min(self.cursor_x, row_len);
     }
+    
 
+    /* @brief adjusts column and row offsets so that the cursor in the buffer
+     *        is always rendered in the terminal
+     */
     pub fn scroll(&mut self, editor_rows: &EditorRows) {
-        self.render_x = if self.cursor_y < editor_rows.num_rows() {
-            self.get_render_x(&editor_rows.get_row(self.cursor_y))
-        } else {
-            0
-        };
+        // update render_x which is the position of the cursor on terminal
+        //  differs from cursor_x in the buffer due to tabs being expanded to 
+        //  4 spaces
+        (self.render_x, self.cursor_x) = 
+            if self.cursor_y < editor_rows.num_rows() {
+                (self.get_render_x(&editor_rows.get_row(self.cursor_y)),
+                min(editor_rows.get_row(self.cursor_y).row_content.len(), 
+                    self.cursor_x))
+            } else {
+                (0, 0)
+            };
+        // row_offset is the position where scree rendering starts
+        //  next 2 blocks ensures cursor_y is always on screen
         if self.cursor_y >= self.row_offset + self.size_y {
             self.row_offset = self.cursor_y - self.size_y + 1;
         }
         if self.cursor_y < self.row_offset {
             self.row_offset = self.cursor_y;
         }
+        // cursor x is always on screen
         if self.render_x >= self.col_offset + self.size_x {
             self.col_offset = self.render_x - self.size_x + 1;
         }
         if self.render_x < self.col_offset {
             self.col_offset = self.render_x;
         }
+
+
     }
 
     pub fn get_render_x(&mut self, row: &Row) -> usize {
-        row.row_content[..self.cursor_x]
+        let cursor_x = min(row.row_content.len(), self.cursor_x);
+        row.row_content[..cursor_x]
             .chars()
             .fold(0, |accm, chr| {
                 if chr == '\t' {

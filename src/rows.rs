@@ -1,23 +1,39 @@
-use std::{env, fs::{self, read_to_string}, io, cmp, path};
+use std::{env, fs::{self, read_to_string}, io, cmp, path::{self, PathBuf}, io::Write};
 
 pub const TAB_STOP: usize = 8;
 
+#[derive(Default)]
 pub struct Row {
-    pub row_content: Box<str>,
+    pub row_content: String,
     pub render: String,
 }
 
 impl Row {
-    fn new(row_content: Box<str>, render: String) -> Self {
+    fn new(row_content: String, render: String) -> Self {
         Self {
             row_content,
             render,
         }
     }
+
+    pub fn insert_char(&mut self, char: char, at: usize) {
+        self.row_content.insert(at, char);
+        EditorRows::render_row(self);
+    }
+
+    pub fn delete_char(&mut self, at: usize) {
+        if at < self.row_content.len() {
+            self.row_content.remove(at);
+            EditorRows::render_row(self)
+        }
+    }
+
 }
 
 pub struct EditorRows {
-    pub contents: Vec<Row>,
+    contents: Vec<Row>,
+    pub filename: Option<PathBuf>,
+    
 }
 
 impl EditorRows {
@@ -26,12 +42,13 @@ impl EditorRows {
         match arg.nth(1) {
             None => Self {
                 contents: Vec::new(),
+                filename: None,
             },
-            Some(file) => Self::from_file(file.as_ref()),
+            Some(file) => Self::from_file(file.into()),
         }
     }
     
-    fn render_row(row: &mut Row) {
+    pub fn render_row(row: &mut Row) {
         let mut idx = 0;
         let capacity = 
             row.row_content
@@ -54,9 +71,10 @@ impl EditorRows {
             });
     }
 
-    fn from_file(file: &path::Path) -> Self {
-        let file_contents = read_to_string(file).expect("Unable to read");
+    fn from_file(file: PathBuf) -> Self {
+        let file_contents = read_to_string(&file).expect("Unable to read");
         Self {
+            filename: Some(file),
             contents: file_contents
                 .lines()
                 .map(|it| {
@@ -76,9 +94,58 @@ impl EditorRows {
         &self.contents[at]
     }
 
+    pub fn get_row_mut(&mut self, at: usize) -> &mut Row {
+        &mut self.contents[at]
+    }
+
     pub fn get_render<'a>(self:&'a Self, at: usize) -> &'a str {
         self.get_row(at).render.as_str()
     }
+
+    pub fn insert_row(&mut self) {
+        self.contents.push(Row::default())
+    }
+
+    pub fn delete_row(&mut self, at: usize) {
+        self.contents.remove(at);
+    }
+
+    pub fn delete_row_shift_up(&mut self, at: usize) {
+        let content = self.get_row(at).row_content.clone();
+        let pushed_on = self.get_row_mut(at - 1);
+        pushed_on
+            .row_content
+            .push_str(content.as_str());
+        EditorRows::render_row(pushed_on);
+        self.delete_row(at);
+    }
+
+    pub fn insert_row_at(&mut self, at: usize) {
+        self.contents.insert(at, Row::default());
+    }
+
+    pub fn save(&self) -> io::Result<usize> {
+        match &self.filename {
+            None => Err(io::Error::new(io::ErrorKind::NotFound, "no file name specified")),
+            Some(name) => {
+                let mut file = fs::OpenOptions::new().write(true).create(true).open(name)?;
+                let content = 
+                    self.contents
+                        .iter()
+                        .fold(
+                            String::new(),
+                            |mut accm, row| {
+                                accm.push_str(row.row_content.as_str());
+                                accm.push('\n');
+                                accm
+                            });         
+                file.set_len(content.len() as u64)?;
+                file.write_all(content.as_bytes())?;
+                Ok(content.as_bytes().len())
+            }
+        }
+    }
+
 }
 
 

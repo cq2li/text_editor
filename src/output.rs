@@ -5,7 +5,7 @@ use crate::rows::EditorRows;
 use crate::status::StatusMessage;
 
 use std::cmp::{max, min};
-use std::io::{stdout, Write, self};
+use std::io::{self, stdout, Write};
 
 use crossterm::style;
 use crossterm::{
@@ -115,10 +115,22 @@ impl Output {
         let line_info: String = if self.editor_rows.num_rows() == 0 {
             String::from("Empty File")
         } else {
+            let y_lim = self.editor_rows.num_rows();
+            let buf_y = self.cursor_controller.cursor_y;
+            let x_lim = 
+                if y_lim == buf_y {
+                    0
+                } else {
+                    self.editor_rows.get_row(buf_y).row_content.len()
+                };
+            let buf_x = self.cursor_controller.cursor_x;
+
             format!(
-                "{}/{}",
-                self.cursor_controller.cursor_y + 1,
-                self.editor_rows.num_rows(),
+                "col {}/{} row {}/{}",
+                buf_x + 1,
+                x_lim + 1,
+                buf_y + 1,
+                y_lim + 1,
             )
         };
         let line_info_len = line_info.len();
@@ -155,46 +167,105 @@ impl Output {
             self.editor_rows.insert_row();
         }
         self.editor_rows
-                .get_row_mut(self.cursor_controller.cursor_y)
-                .insert_char(char, self.cursor_controller.cursor_x);
+            .get_row_mut(self.cursor_controller.cursor_y)
+            .insert_char(char, self.cursor_controller.cursor_x);
         self.cursor_controller.cursor_x += 1;
     }
 
-    pub fn delete_char(&mut self, method: KeyCode) {
+    pub fn backspace(&mut self) {
         let cursor_y = self.cursor_controller.cursor_y;
-        let cursor_x = 
-            self.cursor_controller.cursor_x + 
-            match method {
-                KeyCode::Backspace => 0,
-                KeyCode::Delete => 1,
-                _ => unimplemented!(),
-            };
+        let cursor_x = self.cursor_controller.cursor_x;
+        let total_rows = self.editor_rows.num_rows();
 
-        let x_adjust: usize = match method {
-            KeyCode::Backspace => 1,
-            KeyCode::Delete => 0,
-            _ => unimplemented!(),
+        let content_len = if cursor_y < total_rows {
+            self.editor_rows.get_row(cursor_y).row_content.len()
+        } else {
+            0
         };
 
-        if cursor_y == 0 && cursor_x == 0 {
-            return ()
+        match (cursor_y, cursor_x, total_rows) {
+            // top left cursor with empty file, delete empty row
+            (0, 0, 1) if content_len == 0 => 
+                self.editor_rows.delete_row(cursor_y),
+            // top left cursor with non empty file, do nothing
+            (0, 0, _) => (),
+            // if at the end of the file, nothing to delete so move cursor left
+            (c_y, _, t_r) if c_y == t_r => 
+                self.move_cursor(KeyCode::Left),
+            // if at the beginning of a line, "delete" the new line by 
+            //  appending row to previous row and then deleting the current row
+            (c_y, 0, _) => {
+                let prev_row_len = 
+                    self.editor_rows.get_row(cursor_y - 1).row_content.len();
+
+                self.editor_rows.delete_row_shift_up(c_y);
+                self.cursor_controller.cursor_y -= 1;
+                self.cursor_controller.cursor_x = prev_row_len;
+                ()
+            },
+            // normal deletion of a character before the x cursor
+            (c_y, c_x, _) => {
+                self.editor_rows.get_row_mut(c_y).delete_char(c_x - 1);
+                self.cursor_controller.cursor_x -= 1;
+                ()
+            }
+        }
+    }
+    
+    /* @brief peforms text deletion when the delete key is pressed
+     */
+    pub fn del(&mut self) {
+        let cursor_y = self.cursor_controller.cursor_y;
+        let cursor_x = self.cursor_controller.cursor_x;
+        let total_rows = self.editor_rows.num_rows();
+        let content_len = if cursor_y < total_rows {
+            self.editor_rows.get_row(cursor_y).row_content.len()
+        } else {
+            0
+        };
+
+        match (cursor_y, cursor_x, total_rows) {
+            // empty file, do nothing
+            (0, 0, 0) => (),
+            // empty row, delete it and make it an empty file
+            (0, 0, 1) if content_len == 0 => self.editor_rows.delete_row(0),
+            // end of the file, do nothing
+            (c_y, c_x, t_r) if c_y >= t_r - 1 && c_x == content_len => (),
+            // pressing delete at the end of an row concats two lines
+            (c_y, c_x, _) if c_x == content_len => {
+                self.editor_rows.delete_row_shift_up(c_y + 1);
+            },
+            // normal deletion of a character before the x cursor
+            (c_y, c_x, _) => {
+                self.editor_rows.get_row_mut(c_y).delete_char(c_x);
+                ()
+            },
+
         }
 
-        if cursor_y == self.editor_rows.num_rows() {
-            self.move_cursor(KeyCode::Left);
-            return ()
+    } 
+    
+    pub fn enter(&mut self) {
+        let cursor_y = self.cursor_controller.cursor_y;
+        let cursor_x = self.cursor_controller.cursor_x;
+        let total_rows = self.editor_rows.num_rows();
+        let content_len = if cursor_y < total_rows {
+            self.editor_rows.get_row(cursor_y).row_content.len()
+        } else {
+            0
+        };
+
+        if cursor_y == total_rows {
+            self.editor_rows.insert_row();
+            self.cursor_controller.cursor_y += 1;
+        } else {
+            let split = 
+                self.editor_rows.get_row_mut(cursor_y).row_content.split_off(cursor_x);
+            self.editor_rows.insert_row_at(cursor_y + 1);
+            self.editor_rows.get_row_mut(cursor_y + 1).row_content.push_str(&split);
+            EditorRows::render_row(self.editor_rows.get_row_mut(cursor_y));
+            EditorRows::render_row(self.editor_rows.get_row_mut(cursor_y + 1));
         }
-        
-        if cursor_x == 0 {
-            self.editor_rows.delete_row_shift_up(cursor_y);
-            self.cursor_controller.cursor_y -= 1;
-            return ()
-        }
-        
-        self.editor_rows
-                .get_row_mut(self.cursor_controller.cursor_y)
-                .delete_char(self.cursor_controller.cursor_x - x_adjust);
-        self.cursor_controller.cursor_x -= x_adjust;
     }
 
     pub fn save(&self) {

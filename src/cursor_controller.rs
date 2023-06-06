@@ -92,10 +92,11 @@ impl CursorController {
     }
 
     pub fn scroll(&mut self, editor_rows: &EditorRows) {
-        self.render_x = if self.cursor_y < editor_rows.num_rows() {
-            self.get_render_x(&editor_rows.get_row(self.cursor_y))
+        (self.render_x, self.cursor_x) = if self.cursor_y < editor_rows.num_rows() {
+            (self.get_render_x(&editor_rows.get_row(self.cursor_y)),
+            min(editor_rows.get_row(self.cursor_y).row_content.len(), self.cursor_x))
         } else {
-            0
+            (0, 0)
         };
         if self.cursor_y >= self.row_offset + self.size_y {
             self.row_offset = self.cursor_y - self.size_y + 1;
@@ -109,10 +110,13 @@ impl CursorController {
         if self.render_x < self.col_offset {
             self.col_offset = self.render_x;
         }
+
+
     }
 
     pub fn get_render_x(&mut self, row: &Row) -> usize {
-        row.row_content[..self.cursor_x]
+        let cursor_x = min(row.row_content.len(), self.cursor_x);
+        row.row_content[..cursor_x]
             .chars()
             .fold(0, |accm, chr| {
                 if chr == '\t' {

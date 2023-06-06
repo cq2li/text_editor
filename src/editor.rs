@@ -36,11 +36,13 @@ impl Editor {
 
     fn process_keyevent(&mut self) -> crossterm::Result<bool> {
         match self.reader.read_keyevent() {
+            /* exit the program */
             Some(event::KeyEvent {
                 code: KeyCode::Char('q'),
                 modifiers: event::KeyModifiers::CONTROL,
                 ..
             }) => return Ok(false),
+            /* movement controller */
             Some(event::KeyEvent {
                 code: direction @ 
                     (KeyCode::Up|KeyCode::Down|
@@ -57,16 +59,30 @@ impl Editor {
                 modifiers: KeyModifiers::CONTROL,
                 ..
             }) => self.output.move_cursor(direction),
+            /* saving document */
             Some(event::KeyEvent {
                 code: KeyCode::Char('s'),
                 modifiers: KeyModifiers::CONTROL,
                 ..
             }) => self.output.save(),
+            /* deletions */
             Some(event::KeyEvent {
-                code: code @ (KeyCode::Backspace|KeyCode::Delete),
+                code: KeyCode::Backspace,
                 modifiers: KeyModifiers::NONE,
                 ..
-            }) => self.output.delete_char(code),
+            }) => self.output.backspace(),
+            Some(event::KeyEvent {
+                code: KeyCode::Delete,
+                modifiers: KeyModifiers::NONE,
+                ..
+            }) => self.output.del(),
+            /* new line */
+            Some(event::KeyEvent {
+                code: KeyCode::Enter,
+                modifiers: KeyModifiers::NONE,
+                ..
+            }) => self.output.enter(),
+            /* editing document content */
             Some(event::KeyEvent {
                 code: code @ (KeyCode::Char(..)|KeyCode::Tab),
                 modifiers: KeyModifiers::NONE,

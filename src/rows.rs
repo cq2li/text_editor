@@ -27,6 +27,7 @@ impl Row {
             EditorRows::render_row(self)
         }
     }
+
 }
 
 pub struct EditorRows {
@@ -47,7 +48,7 @@ impl EditorRows {
         }
     }
     
-    fn render_row(row: &mut Row) {
+    pub fn render_row(row: &mut Row) {
         let mut idx = 0;
         let capacity = 
             row.row_content
@@ -117,6 +118,10 @@ impl EditorRows {
             .push_str(content.as_str());
         EditorRows::render_row(pushed_on);
         self.delete_row(at);
+    }
+
+    pub fn insert_row_at(&mut self, at: usize) {
+        self.contents.insert(at, Row::default());
     }
 
     pub fn save(&self) -> io::Result<()> {

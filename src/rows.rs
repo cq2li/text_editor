@@ -1,4 +1,4 @@
-use std::{env, fs::{self, read_to_string}, io, cmp, path::{self, PathBuf}, io::Write};
+use std::{env, fs::{self, read_to_string}, io, path::{PathBuf}, io::Write};
 
 pub const TAB_STOP: usize = 8;
 
@@ -140,7 +140,9 @@ impl EditorRows {
                                 accm
                             });         
                 file.set_len(content.len() as u64)?;
-                file.write_all(content.as_bytes())?;
+                if let Err(err) = file.write_all(content.as_bytes()) {
+                    return Err(err);
+                };
                 Ok(content.as_bytes().len())
             }
         }

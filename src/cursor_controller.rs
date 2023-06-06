@@ -1,6 +1,6 @@
 use crossterm::event::{KeyCode};
 use crate::rows::EditorRows;
-use std::cmp::{min, max};
+use std::cmp::{min};
 use crate::rows::{Row, TAB_STOP};
 
 pub struct CursorController {

@@ -4,7 +4,8 @@ use crate::global_vars::VERSION;
 use crate::rows::EditorRows;
 use crate::status::StatusMessage;
 
-use std::cmp::{max, min};
+use std::cmp::{min};
+use std::error::Error;
 use std::io::{self, stdout, Write};
 
 use crossterm::style;
@@ -268,10 +269,20 @@ impl Output {
         self.dirty += 1;
     }
 
-    pub fn save(&mut self) -> io::Result<usize> {
+    pub fn save(&mut self) {
         let res = self.editor_rows.save();
-        self.dirty = 0;
-        res
+        match res {
+            Err(err) => {
+                self.status_message.clear_custom_message();
+                self.status_message.set_message(format!("Error {:?}", err.to_string()));
+            },
+            Ok(w) => {
+                self.dirty = 0;
+                self.status_message
+                    .set_message(format!("{} bytes written to disk", w))
+
+            }
+        }
     }
 }
 

@@ -93,10 +93,7 @@ impl Editor {
                         return Ok(true);
                     }
                 }
-                let len_written = self.output.save()?;
-                self.output
-                    .status_message
-                    .set_message(format!("{} bytes written to disk", len_written))
+                self.output.save();
             }
             /* deletions */
             Some(event::KeyEvent {

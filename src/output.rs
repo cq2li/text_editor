@@ -15,12 +15,14 @@ use crossterm::{
 };
 use terminal::ClearType;
 
+
 pub struct Output {
     size: (usize, usize),
     buffer: Buf,
     cursor_controller: CursorController,
     editor_rows: EditorRows,
-    status_message: StatusMessage,
+    pub status_message: StatusMessage,
+    pub dirty: u64,
 }
 
 impl Output {
@@ -33,7 +35,8 @@ impl Output {
             buffer: Buf::new(),
             cursor_controller: CursorController::new(size),
             editor_rows: EditorRows::new(),
-            status_message: StatusMessage::new("HELP: CTRL + q to exit"),
+            status_message: StatusMessage::new("HELP: CTRL + {q: exits, s: save}"),
+            dirty: 0,
         }
     }
 
@@ -100,13 +103,14 @@ impl Output {
             Some(msg) => msg.into(),
             None => {
                 format!(
-                    "{} -- {} lines",
+                    "{} {} -- {} lines",
                     self.editor_rows
                         .filename
                         .as_ref()
                         .and_then(|path| path.file_name())
                         .and_then(|name| name.to_str())
                         .unwrap_or("[No Name]"),
+                    if self.dirty > 0 {"Mod"} else {""},
                     self.editor_rows.num_rows()
                 )
             }
@@ -170,19 +174,18 @@ impl Output {
             .get_row_mut(self.cursor_controller.cursor_y)
             .insert_char(char, self.cursor_controller.cursor_x);
         self.cursor_controller.cursor_x += 1;
+        self.dirty += 1;
     }
 
     pub fn backspace(&mut self) {
         let cursor_y = self.cursor_controller.cursor_y;
         let cursor_x = self.cursor_controller.cursor_x;
         let total_rows = self.editor_rows.num_rows();
-
         let content_len = if cursor_y < total_rows {
             self.editor_rows.get_row(cursor_y).row_content.len()
         } else {
             0
         };
-
         match (cursor_y, cursor_x, total_rows) {
             // top left cursor with empty file, delete empty row
             (0, 0, 1) if content_len == 0 => 
@@ -210,6 +213,7 @@ impl Output {
                 ()
             }
         }
+        self.dirty += 1;
     }
     
     /* @brief peforms text deletion when the delete key is pressed
@@ -223,7 +227,6 @@ impl Output {
         } else {
             0
         };
-
         match (cursor_y, cursor_x, total_rows) {
             // empty file, do nothing
             (0, 0, 0) => (),
@@ -242,22 +245,16 @@ impl Output {
             },
 
         }
-
+        self.dirty += 1;
     } 
     
     pub fn enter(&mut self) {
         let cursor_y = self.cursor_controller.cursor_y;
         let cursor_x = self.cursor_controller.cursor_x;
         let total_rows = self.editor_rows.num_rows();
-        let content_len = if cursor_y < total_rows {
-            self.editor_rows.get_row(cursor_y).row_content.len()
-        } else {
-            0
-        };
 
         if cursor_y == total_rows {
             self.editor_rows.insert_row();
-            self.cursor_controller.cursor_y += 1;
         } else {
             let split = 
                 self.editor_rows.get_row_mut(cursor_y).row_content.split_off(cursor_x);
@@ -266,9 +263,14 @@ impl Output {
             EditorRows::render_row(self.editor_rows.get_row_mut(cursor_y));
             EditorRows::render_row(self.editor_rows.get_row_mut(cursor_y + 1));
         }
+        self.cursor_controller.cursor_y += 1;
+        self.cursor_controller.cursor_x  = 0;
+        self.dirty += 1;
     }
 
-    pub fn save(&self) {
-        self.editor_rows.save().unwrap()
+    pub fn save(&mut self) -> io::Result<usize> {
+        let res = self.editor_rows.save();
+        self.dirty = 0;
+        res
     }
 }

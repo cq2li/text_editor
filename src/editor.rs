@@ -7,6 +7,8 @@ use terminal::{ClearType};
 use crate::reader::Reader;
 use crate::output::Output;
 
+const QUIT_CONFIRM: u8 = 1;
+
 // @brief stores clean up code in drop
 pub struct CleanUp;
 
@@ -23,6 +25,7 @@ impl Drop for CleanUp {
 pub struct Editor {
     reader: Reader,
     output: Output,
+    quit: u8,
 }
 
 impl Editor {
@@ -31,6 +34,7 @@ impl Editor {
         // execute!(stdout(), cursor::Hide).expect("Could not hide cursor");
         Self { reader: Reader,
                output: Output::new(),
+               quit: QUIT_CONFIRM,
         }
     }
 
@@ -41,7 +45,17 @@ impl Editor {
                 code: KeyCode::Char('q'),
                 modifiers: event::KeyModifiers::CONTROL,
                 ..
-            }) => return Ok(false),
+            }) => {
+                if self.output.dirty > 0 && self.quit > 0 {
+                    self.output
+                        .status_message
+                        .set_message("Unsaved changes! Press CTRL + q again to confirm".to_string());
+                    self.quit -= 1;
+                    return Ok(true)
+                } else {
+                    return Ok(false)
+                }
+            },
             /* movement controller */
             Some(event::KeyEvent {
                 code: direction @ 
@@ -64,7 +78,11 @@ impl Editor {
                 code: KeyCode::Char('s'),
                 modifiers: KeyModifiers::CONTROL,
                 ..
-            }) => self.output.save(),
+            }) => {
+                let len_written = self.output.save()?;
+                self.output.status_message.set_message(
+                    format!("{} bytes written to disk", len_written))
+            },
             /* deletions */
             Some(event::KeyEvent {
                 code: KeyCode::Backspace,
@@ -85,16 +103,18 @@ impl Editor {
             /* editing document content */
             Some(event::KeyEvent {
                 code: code @ (KeyCode::Char(..)|KeyCode::Tab),
-                modifiers: KeyModifiers::NONE,
+                modifiers: case @ (KeyModifiers::NONE| KeyModifiers::SHIFT),
                 ..
             }) => self.output.insert_char(match code {
                 KeyCode::Tab => '\t',
-                KeyCode::Char(char) => char,
+                KeyCode::Char(char) if matches!(case, KeyModifiers::NONE) => char,
+                KeyCode::Char(char) if matches!(case, KeyModifiers::SHIFT) => char.to_ascii_uppercase(),
                 _ => unimplemented!(),
             }),
             None => (),
             _ => (),
         }
+        self.quit = QUIT_CONFIRM;
         return Ok(true)
         
     }

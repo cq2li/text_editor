@@ -124,7 +124,7 @@ impl EditorRows {
         self.contents.insert(at, Row::default());
     }
 
-    pub fn save(&self) -> io::Result<()> {
+    pub fn save(&self) -> io::Result<usize> {
         match &self.filename {
             None => Err(io::Error::new(io::ErrorKind::NotFound, "no file name specified")),
             Some(name) => {
@@ -140,7 +140,8 @@ impl EditorRows {
                                 accm
                             });         
                 file.set_len(content.len() as u64)?;
-                file.write_all(content.as_bytes())
+                file.write_all(content.as_bytes())?;
+                Ok(content.as_bytes().len())
             }
         }
     }

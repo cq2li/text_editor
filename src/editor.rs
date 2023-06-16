@@ -34,6 +34,8 @@ impl Editor {
 
     fn process_keyevent(&mut self) -> crossterm::Result<bool> {
         match self.reader.read_keyevent() {
+
+
             /* exit the program */
             Some(event::KeyEvent {
                 code: KeyCode::Char('q'),
@@ -57,6 +59,8 @@ impl Editor {
                 }
                 return Ok(false);
             }
+
+
             /* movement controller */
             Some(event::KeyEvent {
                 code:
@@ -80,6 +84,8 @@ impl Editor {
                 modifiers: KeyModifiers::CONTROL,
                 ..
             }) => self.output.move_cursor(direction),
+
+
             /* saving document */
             Some(event::KeyEvent {
                 code: KeyCode::Char('s'),
@@ -95,6 +101,8 @@ impl Editor {
                 }
                 self.output.save();
             }
+
+
             /* deletions */
             Some(event::KeyEvent {
                 code: KeyCode::Backspace,
@@ -106,12 +114,16 @@ impl Editor {
                 modifiers: KeyModifiers::NONE,
                 ..
             }) => self.output.del(),
+
+
             /* new line */
             Some(event::KeyEvent {
                 code: KeyCode::Enter,
                 modifiers: KeyModifiers::NONE,
                 ..
             }) => self.output.enter(),
+
+
             /* editing document content */
             Some(event::KeyEvent {
                 code: code @ (KeyCode::Char(..) | KeyCode::Tab),
@@ -125,8 +137,20 @@ impl Editor {
                 }
                 _ => unimplemented!(),
             }),
+
+            
+            /* ctrl f to find */
+            Some(event::KeyEvent {
+                code: KeyCode::Char('f'),
+                modifiers: KeyModifiers::CONTROL,
+                ..
+            }) => {
+                self.output.find()?;
+            }
+            Some(_) => (),
             None => (),
-            _ => (),
+
+
         }
         return Ok(true);
     }

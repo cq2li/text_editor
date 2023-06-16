@@ -6,6 +6,7 @@ mod cursor_controller;
 mod editor;
 mod rows;
 mod status;
+mod search;
 
 use editor::{Editor, CleanUp};
 use std::io::stdout;

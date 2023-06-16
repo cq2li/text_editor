@@ -3,18 +3,17 @@ use crate::cursor_controller::CursorController;
 use crate::global_vars::VERSION;
 use crate::rows::EditorRows;
 use crate::status::StatusMessage;
-
-use std::cmp::{min};
-use std::error::Error;
-use std::io::{self, stdout, Write};
-
+use std::cmp::min;
+use std::io::{stdout, Write};
 use crossterm::style;
 use crossterm::{
     cursor,
-    event::{self, KeyCode},
+    event::{self, KeyCode, KeyModifiers},
     execute, queue, terminal,
 };
 use terminal::ClearType;
+use crate::reader::Reader;
+use crate::search::{ SearchIndex, SearchDirection };
 
 pub struct Output {
     size: (usize, usize),
@@ -23,6 +22,7 @@ pub struct Output {
     pub editor_rows: EditorRows,
     pub status_message: StatusMessage,
     pub dirty: u64,
+    search_index: SearchIndex,
 }
 
 impl Output {
@@ -35,8 +35,9 @@ impl Output {
             buffer: Buf::new(),
             cursor_controller: CursorController::new(size),
             editor_rows: EditorRows::new(),
-            status_message: StatusMessage::new("HELP: CTRL + {q: exits, s: save}"),
+            status_message: StatusMessage::new("HELP: CTRL + {q: exits, s: save, f: search}"),
             dirty: 0,
+            search_index: SearchIndex::new(),
         }
     }
 
@@ -110,7 +111,7 @@ impl Output {
                         .and_then(|path| path.file_name())
                         .and_then(|name| name.to_str())
                         .unwrap_or("[No Name]"),
-                    if self.dirty > 0 { "Mod" } else { "" },
+                    if self.dirty > 0 { "Modified!" } else { "" },
                     self.editor_rows.num_rows()
                 )
             }
@@ -284,18 +285,110 @@ impl Output {
             }
         }
     }
+    
+    fn find_callback(output: &mut Output, keyword: &str, key_code: Option<KeyCode>) {
+        match key_code {
+            Some(KeyCode::Esc | KeyCode::Enter) => {
+                output.search_index.reset();
+            },
+            Some(_) => {
+                // these two lines reset the position of search when a new character is typed
+                output.search_index.y_direction = None;
+                output.search_index.x_direction = None;
+                match key_code {
+                    Some(KeyCode::Down) => {
+                        output.search_index.y_direction = SearchDirection::Forward.into()
+                    },
+                    Some(KeyCode::Up) => {
+                        output.search_index.y_direction = SearchDirection::Backward.into()
+                    },
+                    Some(KeyCode::Left) => {
+                        output.search_index.x_direction = SearchDirection::Backward.into()
+                    },
+                    Some(KeyCode::Right) => {
+                        output.search_index.x_direction = SearchDirection::Forward.into()
+                    },
+                    _ => {}
+                } 
+                // resets anytime any key other than up/down/left/right is pressed
+                for i in 0..output.editor_rows.num_rows() {
+                    let row_index = match output.search_index.y_direction {
+                        None => {
+                            if output.search_index.x_direction.is_none() {
+                                output.search_index.y_index = i;
+                            }
+                            output.search_index.y_index
+                        },
+                        Some(ref dir) => {
+                            if matches!(dir, SearchDirection::Forward) {
+                                output.search_index.y_index + i + 1
+                            } else {
+                                let res = output.search_index.y_index.saturating_sub(i);
+                                if res == 0 {
+                                    break;
+                                }
+                                res - 1
+                            }
+                        }
+                    };
+                    if row_index >= output.editor_rows.num_rows() { break; }
+                    let row = output.editor_rows.get_row(row_index);
+
+                    // resets when up/down is pressed
+                    let index = match output.search_index.x_direction {
+                        None => row.render.find(&keyword),
+                        Some(ref dir) => {
+                            let index = if matches!(dir, SearchDirection::Forward) {
+                                let start = min(row.render.len(), output.search_index.x_index + 1);
+                                row.render[start..].find(&keyword).and_then(|index| Some(start + index))
+                            } else {
+                                row.render[..output.search_index.x_index].rfind(&keyword)
+                            };
+                            if index.is_none() {
+                                break;
+                            }
+                            index
+                        }
+                    };
+
+                    if let Some(index) = index {
+                        output.cursor_controller.cursor_y = row_index;
+                        output.search_index.y_index = row_index;
+                        output.search_index.x_index = index;
+                        output.cursor_controller.cursor_x = output.cursor_controller.get_render_x(row, index);
+                        break;
+                    }
+                }
+            }
+            None => (),
+        }
+    }
+    
+
+    pub fn find(&mut self) -> std::io::Result<()> {
+        let res = self.cursor_controller.clone();
+        if prompt!(self, "Search: {} (ESC to Cancel, Enter to Confirm)", Output::find_callback).is_none() {
+            self.cursor_controller = res;
+        };
+        Ok(())
+    }
 }
 
 #[macro_export()]
 macro_rules! prompt {
-    ($output:expr, $($args:tt)*) => {{
+    ($output:expr, $args:tt) => {
+        prompt!($output, $args, |&_, _, _| {}) // this ignores the callback when called
+                                                          // with 2 arguments
+    };
+    ($output:expr, $args:tt, $callback:expr) => {{
         let output:&mut Output = $output;
         // file name length
         let mut input: String = String::with_capacity(255);
         loop {
-            output.status_message.set_message(format!($($args)*, input));
+            output.status_message.set_message(format!($args, input));
             output.refresh()?;
-            match Reader.read_keyevent() {
+            let key_event = Reader.read_keyevent();
+            match key_event {
                 Some(event::KeyEvent {
                     code: KeyCode::Enter,
                     modifiers: KeyModifiers::NONE,
@@ -303,6 +396,7 @@ macro_rules! prompt {
                 }) => {
                     if !input.is_empty() {
                         output.status_message.set_message(String::new());
+                        $callback(output, &input, Some(KeyCode::Enter));
                         break;
                     }
                 },
@@ -316,12 +410,11 @@ macro_rules! prompt {
                     }
                 },
                 Some(event::KeyEvent {
-                    code: code @ (KeyCode::Char(..)|KeyCode::Tab),
+                    code: code @ KeyCode::Char(..),
                     modifiers: case @ (KeyModifiers::NONE| KeyModifiers::SHIFT),
                     ..
                 }) => input.push(
                     match code {
-                        KeyCode::Tab => '\t',
                         KeyCode::Char(char) if matches!(case, KeyModifiers::NONE) => char,
                         KeyCode::Char(char) if matches!(case, KeyModifiers::SHIFT) => char.to_ascii_uppercase(),
                         _ => unimplemented!(),
@@ -333,11 +426,16 @@ macro_rules! prompt {
                 }) => {
                     input.clear();
                     output.status_message.clear_custom_message();
+                    $callback(output, &input, Some(KeyCode::Esc));
                     break;
                 },
                 _ => (),
             }
+            $callback(output, &input, key_event.and_then(|event| Some(event.code)));
         }
         if input.is_empty() { None } else { Some(input) }
     }};
+
 }
+
+use prompt;

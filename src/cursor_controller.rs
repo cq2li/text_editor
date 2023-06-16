@@ -3,13 +3,23 @@ use crate::rows::EditorRows;
 use std::cmp::{min};
 use crate::rows::{Row, TAB_STOP};
 
+#[derive(Clone)] 
 pub struct CursorController {
+    // controls cursor in buffer not accounting for tab expansion
     pub cursor_x: usize,
     pub cursor_y: usize,
+
+    // screen size
     size_x: usize,
     size_y: usize,
+
+    // together with cursor in buffer determines where the rendering starts on screen
+    // for row posistions needs render_x
     pub row_offset: usize,
     pub col_offset: usize,
+    
+    // pseudo cursol assuming tab expansion, can be greater than row length
+    // used for rendering 
     pub render_x: usize,
 }
 
@@ -68,6 +78,7 @@ impl CursorController {
                     self.cursor_x += 1;
                 }
             },
+            // convieniece keys
             KeyCode::End => {
                 self.cursor_x = x_lim;
             },
@@ -101,13 +112,13 @@ impl CursorController {
         //  4 spaces
         (self.render_x, self.cursor_x) = 
             if self.cursor_y < editor_rows.num_rows() {
-                (self.get_render_x(&editor_rows.get_row(self.cursor_y)),
+                (self.get_render_x(&editor_rows.get_row(self.cursor_y), self.cursor_x),
                 min(editor_rows.get_row(self.cursor_y).row_content.len(), 
                     self.cursor_x))
             } else {
                 (0, 0)
             };
-        // row_offset is the position where scree rendering starts
+        // row_offset is the position where screen rendering starts
         //  next 2 blocks ensures cursor_y is always on screen
         if self.cursor_y >= self.row_offset + self.size_y {
             self.row_offset = self.cursor_y - self.size_y + 1;
@@ -125,9 +136,9 @@ impl CursorController {
 
 
     }
-
-    pub fn get_render_x(&mut self, row: &Row) -> usize {
-        let cursor_x = min(row.row_content.len(), self.cursor_x);
+    
+    pub fn get_render_x(&mut self, row: &Row, pos: usize) -> usize {
+        let cursor_x = min(row.row_content.len(), pos);
         row.row_content[..cursor_x]
             .chars()
             .fold(0, |accm, chr| {
@@ -139,4 +150,6 @@ impl CursorController {
                 }
             })
     }
+
+
 }
